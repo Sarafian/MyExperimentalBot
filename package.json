@@ -1,0 +1,15 @@
+{
+  "name": "myexperimentalbot",
+  "version": "1.0.0",
+  "description": "My experimental bot in NodeJS",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "botbuilder": "^3.5.3",
+    "restify": "^4.3.0"
+  }
+}

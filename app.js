@@ -1,6 +1,8 @@
 var builder = require('botbuilder');
 var restify = require('restify');
 
+var botVersion=0.1
+
 //=========================================================
 // Bot Setup
 //=========================================================
@@ -16,73 +18,77 @@ connector = new builder.ChatConnector({
     appPassword: process.env.MICROSOFT_APP_PASSWORD
 });
 server.post('/api/messages', connector.listen());
+
+var defaultAction=function (session) {
+    session.send("%s, I heard: %s", session.userData.name, session.message.text);
+    session.send("Say 'help' or something else...");
+}
+
 var bot = new builder.UniversalBot(connector);
+bot.recognizer(new builder.RegExpRecognizer('HelpIntent', /^(help|options)/i));
 
-//=========================================================
-// Bots Dialogs
-//=========================================================
 
-var intents = new builder.IntentDialog();
-bot.dialog('/', intents);
-
-intents.matches(/^change name/i, [
-    function (session) {
-        session.beginDialog('/name');
-    }
-]);
-/*
-intents.matches(/^subscribe/i, [
-    function (session) {
-        session.beginDialog('/subscribe');
-    },
-    function (session, results) {
-        session.send('Ok... You are subscribed');
-    }
-]);
-*/
-intents.onDefault([
-    function (session, args, next) {
-        session.send('Hello. This is Alex Sarafian experimental chat bot. Have fun!');
-        if (!session.userData.name) {
-            session.send('This is our first time together. I would like to know your name please.');
-            session.beginDialog('/name');
-        } else {
-            next();
-        }
-    },
-    function (session, results) {
-        session.send('Hello %s!', session.userData.name);
-    }
+bot.dialog('/', [
+    defaultAction
 ]);
 
-bot.dialog('/name', [
+// Add first run dialog
+bot.dialog('firstRun', [
     function (session) {
-        if (!session.userData.name) {
-            builder.Prompts.text(session, 'Please tell me your name.');
-        } else {
-            builder.Prompts.text(session, 'Please tell me your new name.');
-        }
+        // Update version number and start Prompts
+        // - The version number needs to be updated first to prevent re-triggering 
+        //   the dialog. 
+        session.send("This is a new version %s of the bot. We need to start over.",botVersion);
+        session.userData.version = botVersion; 
+        builder.Prompts.text(session, "Hello... What's your name?");
     },
     function (session, results) {
-        if (!session.userData.name) {
-            session.send('Nice to meet you %s.',results.response);
-        } else {
-            session.send('%s, I will now call you %s.',session.userData.name,results.response);
-        }
+        // We'll save the users name and send them an initial greeting. All 
+        // future messages from the user will be routed to the root dialog.
         session.userData.name = results.response;
-        session.send('%s, if you want to change your name please type "Change name"',session.userData.name);
-        session.endDialog();
+        session.endDialog("Hi %s, say something to me and I'll echo it back.", session.userData.name); 
     }
-]);
-/*
-bot.dialog('/subscribe', [
-    function (session, args) {
-        // Serialize users address to a string.
-        var address = JSON.stringify(session.message.address);
+]).triggerAction({
+    onFindAction: function (context, callback) {
+        console.log('onFindAction: Trigger_First_Run', process.env.Trigger_First_Run);
+        var score=1.1;
+        switch (process.env.FIRST_RUN_DIALOG) {
+            case "Always":
+                break;
+            case "VersionChange":
+            default:
+                // Trigger dialog if the users version field is less than 1.0
+                // - When triggered we return a score of 1.1 to ensure the dialog is always triggered.
+                var ver = context.userData.version || 0;
+                console.log('onFindAction: ver', ver);
+                var score = ver < botVersion ? 1.1: 0.0;
+                console.log('onFindAction: score', score);
+                break;
+        }
+        callback(null, score);
+    },
+    onInterrupted: function (session, dialogId, dialogArgs, next) {
+        console.log('onInterrupted');
+        // Prevent dialog from being interrupted.
+        session.send("Sorry... We need some information from you first.");
+    }
+});
 
-        // Send back your address.
-        session.send('Your address is %s!', address);
-        session.endDialog();
+// Add help dialog
+bot.dialog('helpDialog', function (session, args) {
+    switch (args.action) {
+        default:
+            // args.action is '*:/help' indicating the triggerAction() was matched
+            session.endDialog("Simple echo bot. Say something and I'll repeat it.");
+            break;
     }
-]);
+}).triggerAction({ matches: 'HelpIntent' });
+
+// Delete user data
+/*
+bot.on('deleteUserData', function (session) {
+    console.log('deleteUserData');
+    session.send("Deleting user data.");
+    session.userData=null;
+});
 */
